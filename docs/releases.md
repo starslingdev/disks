@@ -22,7 +22,7 @@ all branches and commit SHAs remain directly runnable.
 ## Initial 0.1.0 release
 
 The package starts at `0.0.0`, an unpublished baseline. The initial minor changeset proposes
-`0.1.0`. Configure the release App and environment described under [Repository setup](#repository-setup)
+`0.1.0`. Configure the release App and environments described under [Repository setup](#repository-setup)
 before merging the initial implementation.
 
 1. Merge the implementation into `main`. Validation runs, and the publisher skips `0.0.0`
@@ -112,17 +112,24 @@ before enabling releases.
 
 - Install a dedicated GitHub App only on `starslingdev/disks`, with **Contents: read/write** and
   **Pull requests: read/write** (Metadata read is implicit). No Actions, Workflows, administration
-  or npm permission is needed. Set repository variable `RELEASE_APP_ID` and secret
-  `RELEASE_APP_PRIVATE_KEY`. The installation token is restricted to this repository and revoked
+  or npm permission is needed. The installation token is restricted to this repository and revoked
   after the job. It creates the release PR and signed commits through the GitHub API. Ordinary
   `GITHUB_TOKEN` writes suppress follow-up CI, so they are unsuitable for the release PR.
+- Create environment **`release-pr`** and allow only the **`main` branch**, with no tag rules.
+  Add environment variable `RELEASE_APP_ID` and environment secret `RELEASE_APP_PRIVATE_KEY`
+  containing the App's complete PEM private key. The `release-pr` job references this environment;
+  it can access the credentials only after the environment's protection rules pass. Leave required
+  reviewers unset to keep release PR creation automatic. These credentials belong in this
+  environment, not in repository-level settings or the publication environment.
 - Protect `main`: require PRs, review and the `ts` validation checks (`test` and
   `Validate action.yml and workflows`, including their reusable-workflow variants as displayed
   after the first run). Require branches to be current or use a merge queue. Do not exempt the App
   from those rules. Apply your usual CodeQL requirement too.
-- Create environment **`release`**, restrict deployment branches to `main`, and optionally require
+- Create environment **`release`**, allow only the **`main` branch**, and optionally require
   additional release reviewers. The version-specific major approval above is always required by code.
-  Publication uses only the job's `GITHUB_TOKEN` with Contents write and Pull requests read. Keep repository default workflow permissions read-only.
+  This environment is used only by the `publish` job and does not need the App credentials.
+  Publication uses only the job's `GITHUB_TOKEN` with Contents write and Pull requests read.
+  Keep repository default workflow permissions read-only.
 - Enable GitHub **immutable releases** where available. Draft-first publication works with this
   setting: there are no later binary attachments or exact-tag mutations. Protect exact `v*.*.*`
   tags from update/deletion with a ruleset while allowing the publication actor to create them;
