@@ -35,7 +35,7 @@ jobs:
       contents: read
       id-token: write
     name: ${{ inputs.service }} • ${{ matrix.replica }}
-    runs-on: ${{ inputs.service == 'github' && 'ubuntu-26.04-4' || inputs.starsling-runner }}
+    runs-on: ${{ inputs.service == 'github' && 'ubuntu-26.04' || inputs.starsling-runner }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
