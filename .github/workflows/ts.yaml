@@ -1,0 +1,237 @@
+name: ts
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+
+permissions:
+  contents: read
+
+concurrency:
+  # Direct CI and release validation must not cancel each other's pending runs.
+  group: ts-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          run_install: false
+      - run: pnpm i --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run test
+      - name: Verify dist/index.js is up to date
+        run: |
+          pnpm run build
+          if [ -n "$(git status --porcelain -- dist)" ]; then
+            echo "::error::dist/index.js is out of date; run 'pnpm run build' and commit dist/index.js."
+            exit 1
+          fi
+
+      # A GitHub-hosted runner has no StarSling Disks volume, so the action must load, resolve its
+      # path, write every output and skip with `unsupported-runner`; bad inputs and a strict activation
+      # must fail the step.
+      - name: Skip on an unsupported runner
+        id: unsupported
+        uses: ./
+        with:
+          name: smoke
+          path: ~/.disks/disks-smoke
+
+      # Each check compares a step's whole `outputs` object, by output name, so a renamed, missing or
+      # extra output fails it too.
+      - name: Unsupported runner outputs
+        env:
+          OUTPUTS: ${{ toJSON(steps.unsupported.outputs) }}
+        run: |
+          set -euo pipefail
+          diff <(jq -S . <<<"$OUTPUTS") <(jq -nS --arg home "$HOME" '{
+            "name": "smoke",
+            "path": "\($home)/.disks/disks-smoke",
+            "access": "",
+            "mount": "none",
+            "generation": "",
+            "publish-status": "unavailable",
+            "reason": "unsupported-runner"
+          }')
+
+      - name: Invalid input fails the step
+        id: invalid
+        continue-on-error: true
+        uses: ./
+        with:
+          name: smoke
+          access: read-only
+          publish: always
+
+      - name: Strict activation fails the step
+        id: strict
+        continue-on-error: true
+        uses: ./
+        with:
+          name: smoke
+          on-degraded: fail
+
+      - name: Failure outcomes
+        env:
+          INVALID: ${{ toJSON(steps.invalid) }}
+          STRICT: ${{ toJSON(steps.strict) }}
+        run: |
+          set -euo pipefail
+          jq -e '.outcome == "failure" and .outputs.reason == "invalid-input"' <<<"$INVALID"
+          jq -e '.outcome == "failure" and .outputs.reason == "unsupported-runner"' <<<"$STRICT"
+
+      # `GITHUB_STEP_SUMMARY` is a different file in every step, so a later step cannot grep the
+      # action step's summary. Run the bundle directly with summary/output files this step owns.
+      - name: Summary and publish lines (direct run)
+        run: |
+          set -euo pipefail
+          export GITHUB_OUTPUT="$RUNNER_TEMP/direct-out" GITHUB_STEP_SUMMARY="$RUNNER_TEMP/direct-summary"
+          : > "$GITHUB_OUTPUT"; : > "$GITHUB_STEP_SUMMARY"
+          # shellcheck disable=SC2088 # the action expands a leading ~ itself (its path rule)
+          INPUT_NAME=smoke INPUT_PATH='~/.disks/disks-smoke' node dist/index.js > "$RUNNER_TEMP/direct-log" 2>&1
+          grep -F "<h3>StarSling Disks smoke</h3>" "$GITHUB_STEP_SUMMARY"
+          grep -F 'Publication happens after the job and requires an unambiguous success.' "$GITHUB_STEP_SUMMARY"
+          grep -F "<td>Publish</td><td>publish skipped (unsupported-runner)</td>" "$GITHUB_STEP_SUMMARY"
+          grep -F 'disk smoke: publish skipped (unsupported-runner)' "$RUNNER_TEMP/direct-log"
+          if INPUT_NAME=smoke INPUT_ACCESS=read-only INPUT_PUBLISH=always node dist/index.js > "$RUNNER_TEMP/direct-log2" 2>&1; then
+            echo "::error::invalid input should have failed the direct run"
+            exit 1
+          fi
+          grep -F "<td>Publish</td><td>publish skipped (invalid-input)</td>" "$GITHUB_STEP_SUMMARY"
+          grep -F 'disk smoke: publish skipped (invalid-input)' "$RUNNER_TEMP/direct-log2"
+
+      # Provision the real StarSling Runner paths so subsequent `uses: ./` steps exercise
+      # `supportedRunner()`, `core.getIDToken()`, and `askRunner()` across `sudo -n /usr/bin/env -i`.
+      - name: Provision stub StarSling Runner seam
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0755 /opt/starsling/libexec
+          sudo tee /opt/starsling/libexec/disks-step >/dev/null <<'EOF'
+          #!/bin/sh
+          set -eu
+          test "$#" = "0"
+          test "$(id -u)" = "0"
+          test "$HOME" = "/root"
+          test "$PWD" = "/"
+          payload="$(cat)"
+          case "$payload" in
+            *'"token":"ci-oidc-token"'*) ;;
+            *) echo "unexpected stdin payload" >&2; exit 2 ;;
+          esac
+          case "$payload" in
+            *'"name":"pnpm-store"'*) ;;
+            *) echo "stdin payload lacks the disk name" >&2; exit 2 ;;
+          esac
+          echo "helper: mounted smoke volume" >&2
+          printf '%s\n' '{"outcome":"mounted","publishStatus":"pending","fails":false,"mounted":true,"hit":true,"generation":"g7","access":"read-write"}'
+          EOF
+          sudo chmod 0755 /opt/starsling/libexec/disks-step
+
+      - name: Skip with missing-oidc before OIDC server is configured
+        id: no_oidc
+        uses: ./
+        with:
+          name: pnpm-store
+          path: ~/.local/share/pnpm/store
+
+      - name: Start stub OIDC server
+        run: |
+          set -euo pipefail
+          RUNNER_TRACKING_ID="" node -e '
+            const { spawn } = require("node:child_process");
+            const fs = require("node:fs");
+            const child = spawn(
+              process.execPath,
+              [
+                "-e",
+                "const http = require(\"node:http\"); const s = http.createServer((_req, res) => { res.setHeader(\"content-type\", \"application/json\"); res.end(JSON.stringify({ value: \"ci-oidc-token\" })); }); s.listen(0, \"127.0.0.1\", () => process.stdout.write(String(s.address().port) + \"\\n\"));"
+              ],
+              { detached: true, stdio: ["ignore", "pipe", "ignore"] }
+            );
+            child.stdout.once("data", (chunk) => {
+              const port = chunk.toString().trim();
+              fs.appendFileSync(
+                process.env.GITHUB_ENV,
+                "ACTIONS_ID_TOKEN_REQUEST_URL=http://127.0.0.1:" + port + "/token?api-version=1\nACTIONS_ID_TOKEN_REQUEST_TOKEN=ci-request-token\n"
+              );
+              child.stdout.destroy();
+              child.unref();
+            });
+          '
+
+      - name: Mount on a supported runner via sudo -n
+        id: supported
+        uses: ./
+        with:
+          name: pnpm-store
+          path: ~/.local/share/pnpm/store
+          publish: on-change
+
+      - name: Missing OIDC outputs
+        env:
+          OUTPUTS: ${{ toJSON(steps.no_oidc.outputs) }}
+        run: |
+          set -euo pipefail
+          diff <(jq -S . <<<"$OUTPUTS") <(jq -nS --arg home "$HOME" '{
+            "name": "pnpm-store",
+            "path": "\($home)/.local/share/pnpm/store",
+            "access": "",
+            "mount": "none",
+            "generation": "",
+            "publish-status": "unavailable",
+            "reason": "missing-oidc"
+          }')
+
+      - name: Supported runner outputs
+        env:
+          OUTPUTS: ${{ toJSON(steps.supported.outputs) }}
+        run: |
+          set -euo pipefail
+          diff <(jq -S . <<<"$OUTPUTS") <(jq -nS --arg home "$HOME" '{
+            "name": "pnpm-store",
+            "path": "\($home)/.local/share/pnpm/store",
+            "access": "read-write",
+            "mount": "warm",
+            "generation": "g7",
+            "publish-status": "pending",
+            "reason": ""
+          }')
+
+  metadata:
+    name: Validate action.yml and workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Validate action and workflow schemas
+        run: pnpm validate:metadata
+
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color

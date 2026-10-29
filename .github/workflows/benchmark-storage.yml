@@ -1,0 +1,167 @@
+name: Benchmark • StarSling Disks
+on:
+  workflow_dispatch:
+    inputs:
+      starsling-runner:
+        description: StarSling runner label
+        type: string
+        required: false
+        default: starsling-ubuntu-26.04-4
+      mastra-ref:
+        description: Mastra branch, tag, or SHA (resolved once)
+        type: string
+        default: main
+      node-version:
+        description: Node.js version for every benchmark cell
+        type: string
+        default: '24.22.1'
+permissions:
+  contents: read
+concurrency:
+  group: disks-benchmark
+  cancel-in-progress: false
+jobs:
+  plan:
+    name: Plan
+    if: >-
+      !github.event.repository.fork &&
+      github.repository == 'starslingdev/disks' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.source.outputs.commit }}
+      key: ${{ steps.source.outputs.key }}
+      starsling-runner: ${{ steps.runner.outputs.label }}
+    steps:
+      - name: Validate StarSling runner label
+        id: runner
+        shell: bash
+        env:
+          RUNNER_LABEL: ${{ inputs.starsling-runner || 'starsling-ubuntu-26.04-4' }}
+        run: |
+          if [[ -z "${RUNNER_LABEL//[[:space:]]/}" || "$RUNNER_LABEL" == *$'\n'* || "$RUNNER_LABEL" == *$'\r'* ]]; then
+            echo "::error::Set the starsling-runner dispatch input to a registered StarSling runner label (4 CPUs, Ubuntu 26.04)."
+            exit 1
+          fi
+          echo "label=$RUNNER_LABEL" >> "$GITHUB_OUTPUT"
+      - id: seed
+        if: github.ref_name != github.event.repository.default_branch
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const branch = context.payload.repository?.default_branch || 'main';
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: 'benchmark-storage.yml',
+              branch,
+              per_page: 20,
+            });
+            for (const run of data.workflow_runs) {
+              const attempt = run.run_attempt || 1;
+              const { data: jobs } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+                ...context.repo,
+                run_id: run.id,
+                attempt_number: attempt,
+                per_page: 100,
+              });
+              // Legacy aliases let branch runs reuse stores published before the job-name cleanup.
+              if (jobs.jobs.some((j) => (j.name.endsWith('Write • starsling / starsling • 0') || j.name.endsWith('Benchmark • write • starsling • 0') || j.name.endsWith('storage-write-starsling-0')) && j.conclusion === 'success')) {
+                core.setOutput('run-id', String(run.id));
+                core.setOutput('key', `${run.id}-${attempt}`);
+                return;
+              }
+            }
+            core.setFailed('No published default-branch StarSling benchmark store found');
+      - if: steps.seed.outputs.run-id != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          digest-mismatch: error
+          name: storage-bench-write-starsling-0
+          run-id: ${{ steps.seed.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: seed
+      - if: steps.seed.outputs.run-id == ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: mastra-ai/mastra
+          ref: ${{ inputs.mastra-ref }}
+          fetch-depth: 1
+          persist-credentials: false
+      - id: source
+        run: |
+          if [ -f seed/storage-result.json ]; then
+            commit=$(sed -n 's/.*"source": "\([0-9a-f]*\)".*/\1/p' seed/storage-result.json)
+            key="${{ steps.seed.outputs.key }}"
+          else
+            commit=$(git rev-parse HEAD)
+            key="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          fi
+          {
+            echo "commit=$commit"
+            echo "key=$key"
+          } >> "$GITHUB_OUTPUT"
+  write:
+    name: Write • ${{ matrix.service }}
+    needs: plan
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [github, starsling]
+    uses: ./.github/workflows/benchmark-storage-cell.yml
+    with:
+      service: ${{ matrix.service }}
+      starsling-runner: ${{ needs.plan.outputs.starsling-runner }}
+      stage: write
+      mastra-sha: ${{ needs.plan.outputs.sha }}
+      node-version: ${{ inputs.node-version }}
+      store-key: ${{ github.run_id }}-${{ github.run_attempt }}
+  read:
+    name: Read • ${{ matrix.service }}
+    needs: [plan, write]
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [github, starsling]
+    uses: ./.github/workflows/benchmark-storage-cell.yml
+    with:
+      service: ${{ matrix.service }}
+      starsling-runner: ${{ needs.plan.outputs.starsling-runner }}
+      stage: read
+      mastra-sha: ${{ needs.plan.outputs.sha }}
+      node-version: ${{ inputs.node-version }}
+      store-key: ${{ matrix.service == 'starsling' && needs.plan.outputs.key || format('{0}-{1}', github.run_id, github.run_attempt) }}
+  summary:
+    name: Summary
+    if: always() && needs.plan.result == 'success'
+    needs: [plan, write, read]
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          digest-mismatch: error
+          pattern: storage-bench-*
+          path: results
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MASTRA_SHA: ${{ needs.plan.outputs.sha }}
+          STARSLING_KEY: ${{ needs.plan.outputs.key }}
+        with:
+          script: |
+            const { default: summarize } = await import(`${process.env.GITHUB_WORKSPACE}/.github/bench/summary.ts`);
+            await summarize({github, context, core});

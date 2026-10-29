@@ -1,0 +1,64 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  // CI treats lint warnings as errors.
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["**", "!dist"]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 120
+  },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "types": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noTemplateCurlyInString": "error",
+        "noUselessEscapeInString": "error"
+      },
+      "style": {
+        "noExcessiveLinesPerFile": {
+          "level": "error",
+          "options": { "maxLines": 500, "skipBlankLines": true }
+        },
+        "noNonNullAssertion": "error",
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error",
+        "useExportType": "error",
+        "useTemplate": "error",
+        "useShorthandFunctionType": "error",
+        "useThrowOnlyError": "error"
+      },
+      "complexity": {
+        "useLiteralKeys": "error",
+        "noCommaOperator": "error"
+      },
+      "performance": {
+        "noAccumulatingSpread": "error",
+        "noDynamicNamespaceImportAccess": "error"
+      },
+      "nursery": {
+        "useExhaustiveSwitchCases": "error",
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    }
+  }
+}
