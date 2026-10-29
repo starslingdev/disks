@@ -19,8 +19,14 @@ const env = { GITHUB_REPOSITORY: REPO, GITHUB_REF: 'refs/heads/main', RELEASE_SH
 const manifest = JSON.stringify({ name: 'disks', private: true, version: '1.0.0' })
 const record: Release = { tag_name: 'v1.0.0', target_commitish: 'abc', body: 'Notes', prerelease: false, draft: false }
 
-function exercise(existingTag: boolean, existingRelease: boolean, draft: boolean, mismatch = false): void {
-  let lookups = 0
+function exercise(
+  existingTag: boolean,
+  existingRelease: boolean,
+  draft: boolean,
+  mismatch = false,
+  draftOnSecondPage = false,
+): void {
+  let release: Release | null = existingRelease ? { ...record, draft } : null
   const git = vi.fn((...args: string[]): string => {
     switch (args.join(' ')) {
       case 'rev-parse HEAD':
@@ -35,7 +41,11 @@ function exercise(existingTag: boolean, existingRelease: boolean, draft: boolean
         return ''
     }
   })
-  const command = vi.fn(() => '')
+  const command = vi.fn((...args: string[]): string => {
+    if (args.slice(0, 3).join(' ') === 'gh release create') release = { ...record, draft: true }
+    if (args.slice(0, 3).join(' ') === 'gh release edit' && release) release.draft = false
+    return ''
+  })
   const io: ReleaseIO = {
     git,
     run: command,
@@ -62,9 +72,13 @@ function exercise(existingTag: boolean, existingRelease: boolean, draft: boolean
             base: { ref: 'main' },
           },
         ]
-      lookups += 1
-      if (lookups === 1 && !existingRelease) return null
-      return { ...record, draft: lookups === 1 ? draft : false }
+      if (path === 'releases/tags/v1.0.0') return release?.draft ? null : release
+      if (path === 'releases?per_page=100&page=1') {
+        if (draftOnSecondPage) return Array.from({ length: 100 }, () => ({ ...record, tag_name: 'v0.9.0' }))
+        return release ? [release] : []
+      }
+      if (path === 'releases?per_page=100&page=2') return release ? [release] : []
+      throw new Error(`Unexpected GitHub request: ${path}`)
     },
     read: (path) => (path === 'package.json' ? manifest : '## 1.0.0\n\nNotes\n'),
     write: vi.fn(),
@@ -102,6 +116,10 @@ describe('release', () => {
       [true, true, false],
     ] as const)
       exercise(tag, release, draft)
+  })
+
+  it('finds an existing draft beyond the first release page', () => {
+    exercise(true, true, true, false, true)
   })
 
   it('stops on conflicting exact tags before publication', () => {

@@ -56,6 +56,7 @@ it('generates 0.1.0 and publishes it only after the release PR merges', () => {
     let releaseHead = ''
     let merged = false
     let release: Release | null = null
+    let interruptPublication = true
     const api = vi.fn((path: string): unknown => {
       if (path === `commits/${sha}/pulls?per_page=100`) {
         return merged
@@ -71,7 +72,9 @@ it('generates 0.1.0 and publishes it only after the release PR merges', () => {
             ]
           : []
       }
-      if (path === 'releases/tags/v0.1.0') return release
+      // GitHub's tag endpoint exposes published releases only.
+      if (path === 'releases/tags/v0.1.0') return release?.draft ? null : release
+      if (path === 'releases?per_page=100&page=1') return release ? [release] : []
       throw new Error(`Unexpected GitHub request: ${path}`)
     })
     const command = vi.fn((...args: string[]): string => {
@@ -91,6 +94,7 @@ it('generates 0.1.0 and publishes it only after the release PR merges', () => {
           expect(args).toContain('--draft=false')
           expect(git('ls-remote', 'origin', 'refs/tags/v0')).toBe('')
           if (!release) throw new Error('No release to publish')
+          if (interruptPublication) throw new Error('Simulated publication interruption')
           release = { ...release, draft: false }
           return ''
         default:
@@ -145,6 +149,11 @@ it('generates 0.1.0 and publishes it only after the release PR merges', () => {
     expect(command).not.toHaveBeenCalled()
     expect(git('ls-remote', '--tags', 'origin')).toBe('')
     merged = true
+    expect(() => publish(io, environment())).toThrow('Simulated publication interruption')
+    expect(release).toMatchObject({ tag_name: 'v0.1.0', target_commitish: sha, draft: true })
+    expect(git('ls-remote', 'origin', 'refs/tags/v0')).toBe('')
+    // Resume the existing draft without creating a second release or moving the exact tag.
+    interruptPublication = false
     publish(io, environment())
     expect(release).toMatchObject({ tag_name: 'v0.1.0', target_commitish: sha, draft: false })
     expect(git('ls-remote', '--tags', 'origin').split('\n').sort()).toEqual([
