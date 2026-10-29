@@ -199,7 +199,18 @@ export function publish(io: ReleaseIO = defaultIO, env: NodeJS.ProcessEnv = proc
   if (tags.includes(tag) && git('rev-parse', `${tag}^{commit}`) !== sha) {
     throw new Error(`Exact tag ${tag} already belongs to another commit`)
   }
-  const getRelease = (): Release | null => io.api(`releases/tags/${tag}`) as Release | null
+  const getRelease = (): Release | null => {
+    const published = io.api(`releases/tags/${tag}`) as Release | null
+    if (published) return published
+    // The tag endpoint excludes drafts, including one created by this run.
+    for (let page = 1; ; page += 1) {
+      const releases = io.api(`releases?per_page=100&page=${page}`) as Release[] | null
+      if (!releases) throw new Error('Cannot read release drafts')
+      const release = releases.find((entry) => entry.tag_name === tag)
+      if (release) return release
+      if (releases.length < 100) return null
+    }
+  }
   let release = getRelease()
   if (release) {
     verifyRelease(release, tag, sha, notes, prerelease)
