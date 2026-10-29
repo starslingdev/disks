@@ -1,6 +1,6 @@
 {
   "name": "disks",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "StarSling Disks action: mount persistent directories on StarSling Runners.",
   "private": true,
   "license": "MIT",

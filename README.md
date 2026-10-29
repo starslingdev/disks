@@ -8,7 +8,7 @@ High-performance persistent storage for GitHub Actions.
 [Disks](#what-are-starsling-disks) are persistent filesystems mounted into [Runners](https://starsling.dev/products/runners). They let concurrent jobs reuse build caches, datasets, and artifacts through ordinary directories.
 
 > [!NOTE]
-> Examples target the first stable major, `v1`. Until that release is published, use a commit SHA. Pin a commit SHA for production workflows ([Releases](#releases)).
+> Examples target `v0`, starting with `v0.1.0`. Until that release is published, use a commit SHA. The `0.x` series is for early adoption and may include breaking changes. Pin a commit SHA for production workflows ([Releases](#releases)).
 
 ## Quickstart
 
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: starslingdev/disks@v1
+      - uses: starslingdev/disks@v0
         with:
           preset: pnpm-store
           publish: ${{ github.ref == 'refs/heads/main' && 'on-change' || 'never' }}
@@ -100,10 +100,10 @@ Docker's data root, a workspace root as the mount and container jobs are out of 
 
 ## Releases
 
-`dist/index.js` is committed on `main` and checked fresh by CI, so every commit SHA, branch and tag is runnable. `vX.Y.Z` tags never move; the major tag (`v1`) moves forward to the latest stable release in that major, after publication succeeds. Prefer a commit SHA:
+`dist/index.js` is committed on `main` and checked fresh by CI, so every commit SHA, branch and tag is runnable. `vX.Y.Z` tags never move; the major tag (`v0`) moves forward to the latest non-prerelease version in that major, after publication succeeds. Prefer a commit SHA:
 
 ```yaml
-- uses: starslingdev/disks@<full-sha> # v1.0.0
+- uses: starslingdev/disks@<full-sha> # v0.1.0
 ```
 
 Contributors add Changesets; automation opens a release PR with version bumps, generated changelog entries and the compiled action. Merging that PR with required checks passing publishes `vX.Y.Z` and advances `vX`. See [the release guide](docs/releases.md) for setup, retries and prereleases.

@@ -19,6 +19,25 @@ in the Major Changes changelog section and GitHub release notes. Docs/tooling ch
 need a release can omit a changeset. Continue building and committing `dist/` with source changes;
 all branches and commit SHAs remain directly runnable.
 
+## Initial 0.1.0 release
+
+The package starts at `0.0.0`, an unpublished baseline. The initial minor changeset proposes
+`0.1.0`. Configure the release App and environment described under [Repository setup](#repository-setup)
+before merging the initial implementation.
+
+1. Merge the implementation into `main`. Validation runs, and the publisher skips `0.0.0`
+   without reading a previous package manifest or creating any tags or releases.
+2. Changesets opens `changeset-release/main` with version `0.1.0`, generated changelog notes,
+   and the bundled action. Review and merge that release PR after its required checks pass.
+3. The publisher validates the merged release commit, publishes the exact `v0.1.0` release,
+   then points `v0` at the same commit. Consumers can use `starslingdev/disks@v0`,
+   `starslingdev/disks@v0.1.0`, or the release commit SHA.
+
+The initial `0.1.0` release follows the normal release PR review path; it does not require the
+special major-release acknowledgement. Later `0.x` releases advance `v0` only after publication.
+The `0.x` series is for early adoption and may include breaking changes; describe migrations
+in the changeset. Promotion to `1.0.0` uses a major changeset and the explicit approval below.
+
 ## Release sequence
 
 1. A change and its changeset merge to `main`. The `release` workflow runs the same read-only
@@ -45,7 +64,7 @@ all branches and commit SHAs remain directly runnable.
 
 Changesets' private-package versioning is enabled and its tagging is disabled. We deliberately
 omit Changesets' npm publish/tag commands and action publication: workspace tag conventions can
-produce `disks@1.0.0`; consumers require `v1.0.0`. The small action-only publisher handles that gap.
+produce `disks@0.1.0`; consumers require `v0.1.0`. The small action-only publisher handles that gap.
 Routine main commits with no version transition create no release.
 
 ## Explicit major-release approval
@@ -62,8 +81,9 @@ The publisher checks this before creating tags or releases. Approval must be for
 head and the exact release version. Approvals from bots or the release PR author are rejected;
 stale approvals, dismissed approvals, later change requests, and reviewers without write access
 cannot satisfy the gate. Major prerelease candidates and their stable graduation also require
-approval. Patch and minor releases use the normal release PR review path. For the initial release,
-review the generated release notes and explicitly approve `v1.0.0` before merging.
+approval. Patch and minor releases, including the initial `0.1.0`, use the normal release PR review
+path. When promoting to `1.0.0`, review the generated release notes and explicitly approve
+`v1.0.0` before merging.
 
 This gate uses GitHub review records and collaborator permissions, so it remains enforced even
 if environment reviewers have not been configured. A missing acknowledgement fails publication;
@@ -113,7 +133,7 @@ before enabling releases.
   configure Actions access for consuming repositories.
 
 No release, tag push, or package publication is needed to validate this implementation. The initial
-changeset proposes `1.0.0`; review its release notes before merging the first release PR.
+changeset proposes `0.1.0`; review its release notes before merging the first release PR.
 
 ## Retry and prerelease operations
 
@@ -136,7 +156,10 @@ Never hand-edit a version to start a release.
 
 Run `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm check:dist`.
 The existing release fixtures run through Vitest as part of `pnpm test` and cover numeric ordering,
-prereleases, changelog extraction, partial-success retries and identity mismatches.
+prereleases, changelog extraction, partial-success retries and identity mismatches. The initial-release
+fixture also exercises the license-only parent commit, real Changesets generation of `0.1.0`,
+the merged release PR gate, and publication of `v0.1.0` followed by `v0` against a local Git remote.
+Only GitHub API calls and release commands are simulated; no remote release is published.
 For a release-plan experiment, use a temporary copy, replace the changelog formatter with the default
 formatter to avoid GitHub API calls, add one changeset, and run `pnpm changeset status --output plan.json`
 then `pnpm changeset version`. Never run a publication command for these experiments.

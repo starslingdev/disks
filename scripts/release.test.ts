@@ -139,6 +139,7 @@ describe('release', () => {
       cwd = join(directory, 'work')
       git('config', 'user.name', 'Fixture')
       git('config', 'user.email', 'fixture@example.com')
+      git('config', 'commit.gpgsign', 'false')
       git('remote', 'add', 'origin', join(directory, 'remote.git'))
       git('commit', '--allow-empty', '-m', 'old')
       const old = git('rev-parse', 'HEAD')

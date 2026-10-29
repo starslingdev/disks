@@ -150,6 +150,11 @@ export function publish(io: ReleaseIO = defaultIO, env: NodeJS.ProcessEnv = proc
   const { version } = manifest
   const candidate = versionParts(version)
   const prerelease = Boolean(candidate.prerelease)
+  // The initial repository setup has no previous package manifest and is not a release.
+  if (version === '0.0.0') {
+    console.log('Unreleased package; nothing to publish.')
+    return
+  }
   // A routine main commit never becomes a release, even if a previous release is absent.
   const previous = JSON.parse(git('show', 'HEAD^1:package.json')) as Manifest
   if (previous.version === version) {

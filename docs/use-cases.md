@@ -18,7 +18,7 @@ GitHub's [`actions/cache`](https://github.com/actions/cache) stores a tar archiv
 A preset mounts a tool's own default directory, so the tool needs no setting. Its path, size cap and change test come from the StarSling API ([`GET /api/disks/presets`](https://runners.starsling.dev/openapi#tag/disks)). `name` defaults to the preset's name; set it to use a different disk.
 
 ```yaml
-- uses: starslingdev/disks@v1
+- uses: starslingdev/disks@v0
   with:
     preset: pnpm-store # or cargo
     publish: on-change
@@ -34,7 +34,7 @@ Keep each tool on its default location, or the mount lands on a directory the to
 Pull requests read the disk and discard what they write. Only the default-branch job asks to publish. One expression covers both:
 
 ```yaml
-- uses: starslingdev/disks@v1
+- uses: starslingdev/disks@v0
   with:
     preset: pnpm-store
     publish: ${{ github.ref == 'refs/heads/main' && 'on-change' || 'never' }}
@@ -47,7 +47,7 @@ A step with `publish` omitted, or set to `never`, does not publish. A read-write
 A step that gives neither `path` nor `preset` mounts the disk at `~/.disks/<name>`. A disk that already has a stored path keeps it.
 
 ```yaml
-- uses: starslingdev/disks@v1
+- uses: starslingdev/disks@v0
   id: models
   with:
     name: models
@@ -67,7 +67,7 @@ A disk under the workspace is not mounted at pre-job, because checkout owns that
 ```yaml
 - uses: actions/checkout@v4
 
-- uses: starslingdev/disks@v1
+- uses: starslingdev/disks@v0
   with:
     name: rust-target
     path: target
@@ -83,7 +83,7 @@ A disk under the workspace is not mounted at pre-job, because checkout owns that
 Reference data, fixtures, and other inputs a job must not rewrite. `read-only` is only valid with `publish: never`. `on-degraded: fail` fails when storage or access is unavailable. A first or retired disk can still mount cold without degradation; if published data is required, also require the step's `mount` output to be `warm`. With no `path` and no preset, the disk is at `~/.disks/reference-data`.
 
 ```yaml
-- uses: starslingdev/disks@v1
+- uses: starslingdev/disks@v0
   with:
     name: reference-data
     access: read-only
