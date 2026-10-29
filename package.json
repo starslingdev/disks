@@ -1,0 +1,42 @@
+{
+  "name": "disks",
+  "version": "0.0.0",
+  "description": "StarSling Disks action: mount persistent directories on StarSling Runners.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "validate:metadata": "node scripts/validate-metadata.ts",
+    "check": "biome migrate --write && biome check --fix",
+    "lint": "biome ci --error-on-warnings .",
+    "build": "tsdown",
+    "check:dist": "tsdown && git diff --exit-code -- dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "changeset": "changeset",
+    "release:version": "changeset version && pnpm install --lockfile-only && pnpm run build",
+    "release:publish": "node scripts/release.ts"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@changesets/changelog-github": "1.0.1",
+    "@changesets/cli": "3.0.3",
+    "@types/node": "24.19.2",
+    "tsdown": "0.23.2",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "ajv": "8.20.0",
+    "yaml": "2.9.1"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "pnpm@12.14.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/starslingdev/disks.git"
+  }
+}

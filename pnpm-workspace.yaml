@@ -1,0 +1,18 @@
+packages: ["."]
+# Optional peers (vite/tsdown would otherwise pull in esbuild/tsx) are not auto-installed:
+# nothing in the build or test path uses esbuild, and tsdown/rolldown does not need it.
+autoInstallPeers: false
+peerDependencyRules:
+  ignoreMissing:
+    - esbuild
+    - tsx
+# Enforce quarantine and trust checks even for entries already in a frozen lockfile.
+minimumReleaseAge: 4320 # 3 days
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+trustLockfile: false
+# Installation executes no project or dependency lifecycle scripts.
+ignoreScripts: true
+strictDepBuilds: true
+allowBuilds: {}

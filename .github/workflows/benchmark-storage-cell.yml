@@ -1,0 +1,146 @@
+name: Benchmark Worker • StarSling Disks
+on:
+  workflow_call:
+    inputs:
+      starsling-runner:
+        type: string
+        required: true
+      service:
+        type: string
+        required: true
+      stage:
+        type: string
+        required: true
+      mastra-sha:
+        type: string
+        required: true
+      node-version:
+        type: string
+        required: true
+      store-key:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  cell:
+    # Evaluate before selecting a runner, including when another workflow calls this file.
+    if: >-
+      !github.event.repository.fork &&
+      github.repository == 'starslingdev/disks' &&
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.service == 'github' || inputs.service == 'starsling') &&
+      (inputs.stage == 'write' || inputs.stage == 'read')
+    permissions:
+      contents: read
+      id-token: write
+    name: ${{ inputs.service }} • ${{ matrix.replica }}
+    runs-on: ${{ inputs.service == 'github' && 'ubuntu-26.04' || inputs.starsling-runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: ${{ inputs.stage == 'write' && fromJSON('[0]') || fromJSON('[1, 2, 3, 4, 5]') }}
+    env:
+      BENCH_STAGE: ${{ inputs.stage }}
+      BENCH_SERVICE: ${{ inputs.service }}
+      BENCH_REPLICA: ${{ matrix.replica }}
+      BENCH_SOURCE: ${{ inputs.mastra-sha }}
+      BENCH_KEY: ${{ inputs.store-key }}
+    steps:
+      - name: Checkout benchmark harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Benchmark the actual action and harness from the dispatched commit.
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Checkout frozen Mastra
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: mastra-ai/mastra
+          ref: ${{ inputs.mastra-sha }}
+          path: mastra
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Configure measurement paths
+        shell: bash
+        run: |
+          {
+            echo "BENCH_STORE=$RUNNER_TEMP/storage-bench-$BENCH_KEY"
+            echo "BENCH_RESULT=$RUNNER_TEMP/storage-result.json"
+            echo "BENCH_CLOCK=$RUNNER_TEMP/storage-clock.json"
+          } >> "$GITHUB_ENV"
+      - name: Start storage timer
+        run: node .github/bench/store.ts start
+      - name: Mount StarSling disk
+        id: disk
+        if: inputs.service == 'starsling'
+        # Execute this checkout's action.yml and dist/index.js with real runner OIDC.
+        uses: ./
+        with:
+          name: bench-${{ inputs.store-key }}
+          path: ${{ env.BENCH_STORE }}
+          access: read-write
+          publish: ${{ inputs.stage == 'write' && github.ref_name == github.event.repository.default_branch && 'always' || 'never' }}
+          auto-mount: 'false'
+          size-cap: 20GB
+          on-degraded: fail
+      - name: Restore GitHub cache
+        if: inputs.service == 'github' && inputs.stage == 'read'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BENCH_STORE }}
+          key: storage-bench-${{ inputs.store-key }}
+          fail-on-cache-miss: true
+      - name: Validate mount and measure availability
+        env:
+          DISK_MOUNT: ${{ steps.disk.outputs.mount }}
+          DISK_ACCESS: ${{ steps.disk.outputs.access }}
+          DISK_GENERATION: ${{ steps.disk.outputs.generation }}
+          DISK_PUBLISH: ${{ steps.disk.outputs.publish-status }}
+          DISK_EXPECT_PUBLISH: ${{ inputs.stage == 'write' && github.ref_name == github.event.repository.default_branch && 'pending' || 'not-requested' }}
+        run: node .github/bench/store.ts access
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: mastra/package.json
+          run_install: false
+          cache: false
+      - name: Install Mastra dependencies
+        working-directory: mastra
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Cache package payload only; Mastra's global store includes checkout-specific links,
+          # and supply-chain lockfile checks read registry metadata outside store-dir.
+          install_args=(--frozen-lockfile --trust-lockfile --ignore-scripts --package-import-method=copy --config.enable-global-virtual-store=false)
+          store_dir="$BENCH_STORE/pnpm"
+          if [ "$BENCH_STAGE" = read ]; then
+            install_args+=(--offline)
+          fi
+          pnpm install "${install_args[@]}" --store-dir "$store_dir"
+      - name: Record successful reader install
+        if: inputs.stage == 'read'
+        run: node .github/bench/store.ts finish
+      - name: Inventory writer store
+        if: inputs.stage == 'write'
+        run: node .github/bench/store.ts inventory
+      - name: Save GitHub cache
+        if: inputs.service == 'github' && inputs.stage == 'write'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BENCH_STORE }}
+          key: storage-bench-${{ inputs.store-key }}
+      - name: Upload measurements
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storage-bench-${{ inputs.stage }}-${{ inputs.service }}-${{ matrix.replica }}
+          path: ${{ env.BENCH_RESULT }}
+          if-no-files-found: error
+          archive: true

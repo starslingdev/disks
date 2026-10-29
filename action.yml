@@ -1,0 +1,52 @@
+# StarSling Disks action: one step's activation of one disk on a StarSling Runner.
+# Consumers reference it as `starslingdev/disks@<tag-or-sha>`. The job must grant `id-token: write`.
+name: StarSling Disks
+description: Mount persistent storage on a StarSling Runner and optionally publish changes after a successful job.
+author: StarSling
+branding:
+  icon: hard-drive
+  color: purple
+inputs:
+  name:
+    description: Name of one of this repository's disks. Defaults to the preset name; required without a preset. A name with no disk yet mounts empty.
+    required: false
+  path:
+    description: Target; a leading ~ is the job user's home, a relative path is under the workspace. Default the stored path, else the preset's, else ~/.disks/<name>.
+    required: false
+  preset:
+    description: Tool preset supplying a path, size cap, and change test. See Presets and limits in the README.
+    required: false
+  size-cap:
+    description: The disk's size cap, such as 20GB.
+    required: false
+  auto-mount:
+    description: Whether the runner mounts the disk before the job's steps (true or false).
+    required: false
+  access:
+    description: read-write (writes stay private to the job) or read-only.
+    required: false
+  publish:
+    description: never, on-change, always or if-missing.
+    required: false
+  on-degraded:
+    description: continue (with no disk, or without publication) or fail. A failure (such as invalid-input) fails the step either way.
+    required: false
+outputs:
+  name:
+    description: The disk's name, the preset name when the step gave none; empty when neither was given.
+  path:
+    description: The absolute target, whenever it resolved; empty when the step gave no path and ended before StarSling responded, since the location then comes from the disk's stored settings.
+  access:
+    description: The mounted access; empty when unmounted.
+  mount:
+    description: warm (mounted over a published generation), cold (mounted empty, for a first or retired disk) or none (not mounted). A mount counts only after it and its access are verified.
+  generation:
+    description: The generation this job read; empty unless mount is warm. Not a generation this job published.
+  publish-status:
+    description: Step-time status (not-requested, not-needed, pending, denied, lease-held or unavailable). pending means the writes may publish after the job succeeds; a failed or cancelled job does not publish. This step does not see the commit.
+  reason:
+    description: A stable reason code, a failure or a degradation, else empty. Not the post-job publish result.
+# No `post`: publication is handled after the job, and only for a successful job.
+runs:
+  using: node24
+  main: dist/index.js
