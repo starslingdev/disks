@@ -7,6 +7,8 @@ export interface Job {
   id: number
   name: string
   conclusion: string | null
+  started_at?: string | null
+  completed_at?: string | null
   steps?: { name: string; conclusion: string | null; started_at?: string; completed_at?: string }[]
 }
 interface Arguments {
@@ -26,11 +28,22 @@ export const median = (values: (number | undefined)[]) => {
   const a = values.filter((v): v is number => v !== undefined && Number.isFinite(v)).sort((a, b) => a - b)
   return a.length ? ((a[Math.floor((a.length - 1) / 2)] ?? 0) + (a[Math.floor(a.length / 2)] ?? 0)) / 2 : null
 }
+const elapsed = (start: string | null | undefined, end: string | null | undefined) => {
+  if (!start || !end) return undefined
+  const seconds = (Date.parse(end) - Date.parse(start)) / 1000
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined
+}
 export function stepSeconds(job: Job, name: string): number | undefined {
   const step = job.steps?.find((s) => s.name === name && s.conclusion === 'success')
-  if (!step?.started_at || !step.completed_at) return undefined
-  const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined
+  return elapsed(step?.started_at, step?.completed_at)
+}
+export const jobSeconds = (job: Job) => elapsed(job.started_at, job.completed_at)
+// Each service saves its store in a different step. GitHub saves in its own `Save GitHub cache` step. StarSling
+// publishes after the job's steps, in the runner's `Complete runner` step, so that step is its save. Summing both
+// per job puts each side's save in one row; a step that is skipped or absent adds nothing.
+export function saveSeconds(job: Job): number | undefined {
+  const parts = ['Save GitHub cache', 'Complete runner'].map((name) => stepSeconds(job, name))
+  return parts.every((p) => p === undefined) ? undefined : parts.reduce<number>((sum, p) => sum + (p ?? 0), 0)
 }
 export function setupSeconds(job: Job): number | undefined {
   const setup = stepSeconds(job, 'Setup pnpm')
@@ -153,6 +166,11 @@ export default async function summarize({ github, context, core }: Arguments) {
     .addRaw(
       '<p>¹ Time to Access plus the Setup pnpm and Install Mastra dependencies steps, summed per job. Durations are medians across successful warm jobs; checkout, Node setup, queueing and benchmark bookkeeping are excluded. Download speed is the median of the final averages reported by actions/cache for compressed archives (MiB/s, labeled MB/s by the action). Mounted disks do not download an archive.</p>\n',
     )
+  const writerWhole = writers.map((s) => median(s.map(({ job }) => jobSeconds(job))))
+  const writerSave = writers.map((s) => median(s.map(({ job }) => saveSeconds(job))))
+  core.summary.addRaw(
+    `<p>Cold writer, whole job: GitHub ${seconds(writerWhole[0] ?? null)}, StarSling ${seconds(writerWhole[1] ?? null)} (GitHub / StarSling ${ratio(writerWhole[0] ?? null, writerWhole[1] ?? null)}). Saving the store: GitHub ${seconds(writerSave[0] ?? null)} in <code>Save GitHub cache</code>, StarSling ${seconds(writerSave[1] ?? null)} in <code>Complete runner</code>, where the disk publishes.</p>\n`,
+  )
   const sha = process.env.MASTRA_SHA ?? ''
   core.summary.addRaw(
     `<p>Mastra revision: <code>${escapeHtml(sha)}</code>. ${process.env.STARSLING_KEY ? `StarSling store: <code>bench-${escapeHtml(process.env.STARSLING_KEY)}</code>. ` : ''}Private writable mounts; readers never publish. Offline installs consume the store directly.</p>\n`,
@@ -171,29 +189,34 @@ export default async function summarize({ github, context, core }: Arguments) {
     const table: Parameters<typeof Core.summary.addTable>[0] = [
       header(['Step', 'GitHub p50 (samples)', 'StarSling p50 (samples)', 'GitHub / StarSling']),
     ]
-    for (const name of names) {
-      const times = groups.map((s) =>
-        s.map(({ job }) => stepSeconds(job, name)).filter((v): v is number => v !== undefined),
-      )
-      if (!times.some((t) => t.length)) continue
+    const timesOf = (measure: (job: Job) => number | undefined) =>
+      groups.map((s) => s.map(({ job }) => measure(job)).filter((v): v is number => v !== undefined))
+    const row = (label: string, times: number[][]) => {
       const medians = times.map((t) => median(t))
-      table.push([
-        escapeHtml(name),
+      return [
+        label,
         ...times.map((t) => (t.length ? `${seconds(median(t))} (n=${t.length})` : '—')),
         ratio(medians[0] ?? null, medians[1] ?? null),
-      ])
+      ]
+    }
+    if (stage === 'write')
+      table.push(row('Whole job', timesOf(jobSeconds)), row('Save the store²', timesOf(saveSeconds)))
+    for (const name of names) {
+      const times = timesOf((job) => stepSeconds(job, name))
+      if (!times.some((t) => t.length)) continue
+      table.push(row(escapeHtml(name), times))
     }
     core.summary.addTable(table)
   }
   core.summary.addRaw(
-    '<p>Actions step timestamps have one-second resolution. A dash means the step did not succeed or does not apply. Zero-second steps have no speed ratio. Only successful, complete jobs enter these tables. Writers on feature branches exercise cold mounts without publishing; warm StarSling readers reuse a published default-branch store at the same Mastra revision.</p>\n</details>\n',
+    "<p>Actions step timestamps have one-second resolution. A dash means the step did not succeed or does not apply. Zero-second steps have no speed ratio. Only successful, complete jobs enter these tables. Writers on feature branches exercise cold mounts without publishing; warm StarSling readers reuse a published default-branch store at the same Mastra revision.</p>\n<p>² GitHub saves its store in the Save GitHub cache step. StarSling publishes its disk after the job's steps, in the runner's Complete runner step, so that step is its save. Both steps are summed per job before the median.</p>\n</details>\n",
   )
   core.summary.addDetails(
     'Method and scope',
     [
       '<p>Both services use the same frozen Mastra revision and pnpm version on 4-CPU Ubuntu runners. Lifecycle scripts and the global virtual store are disabled; copy imports are identical. This measures dependency preparation, not a complete build.</p>',
       '<p>Time to Access starts immediately before mount/restore and ends after validating the manifest and reading one payload byte. GitHub includes archive download and extraction; StarSling measures mount availability. No full-store scan or materialization runs before install.</p>',
-      '<p>Warm readers install offline with a trusted frozen lockfile. Writers populate their stores online. Store integrity checks used by pnpm remain enabled. Disk publication happens after successful default-branch jobs and is not timed. Concurrent readers may contend for storage; results depend on runner hardware and this revision. Failed or incomplete jobs are excluded and fail the benchmark.</p>',
+      "<p>Warm readers install offline with a trusted frozen lockfile. Writers populate their stores online. Store integrity checks used by pnpm remain enabled. Disk publication happens after successful default-branch jobs, in the writer's Complete runner step: it counts in the cold writer's whole job and save, never in Dependencies ready. Concurrent readers may contend for storage; results depend on runner hardware and this revision. Failed or incomplete jobs are excluded and fail the benchmark.</p>",
     ].join('\n'),
   )
   core.summary.addDetails(
