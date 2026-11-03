@@ -10,7 +10,9 @@ on:
       mastra-ref:
         description: Mastra branch, tag, or SHA (resolved once)
         type: string
-        default: main
+        # Pinned so upstream lockfile breakage can't fail main benchmarks.
+        # 26f8370 is the parent of mastra-ai/mastra#29026, whose merge left a dangling vitest@4.1.12 entry.
+        default: 26f8370fead3008ff3801ae7afc79e4b78a88c6b
       node-version:
         description: Node.js version for every benchmark cell
         type: string
