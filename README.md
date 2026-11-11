@@ -47,6 +47,7 @@ StarSling Disks made [Mastra](https://github.com/mastra-ai/mastra)'s dependencie
 GitHub `actions/cache` downloaded a 1.41 GiB compressed archive before extraction. StarSling Disks mounted the filesystem directly, avoiding archive packing, upload, download, and extraction.
 
 **Files ready** is the time from starting restore or mount until the first stored byte can be read.
+
 **Dependencies ready** adds pnpm setup and an offline install. It excludes checkout, Node setup, queueing, and benchmark bookkeeping.
 
 See the [benchmark run](https://github.com/starslingdev/disks/actions/runs/43083684483) and [method](.github/bench/README.md).
