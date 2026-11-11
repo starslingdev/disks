@@ -11,7 +11,7 @@ A **failure** is the step's own fault and always fails the step. A **degradation
 | `nonempty-target` | failure | The target already contains files. | Choose an empty target, or run the step before the tool writes. |
 | `conflicting-repeat` | failure | A second step for the same disk asked for another path or access. | Make the steps agree. |
 | `cleanup-failed` | failure | A mount that did not complete could not be undone. | Contact support. |
-| `unsupported-runner` | degradation | The runner has no StarSling Disks. | Use a StarSling Runner on an enrolled org. |
+| `unsupported-runner` | degradation | The runner has no StarSling Disks. | Use a StarSling Runner for an organization with billing set up. |
 | `missing-oidc` | degradation | The job has no `id-token: write`, or the token request failed. | Grant `id-token: write`. |
 | `untrusted`, `unproven-job` | degradation | StarSling will not mount for this job (a fork, for example), or could not prove it. | |
 | `disabled` | degradation | StarSling disabled the disk. | Contact support. |

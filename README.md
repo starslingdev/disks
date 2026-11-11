@@ -8,11 +8,11 @@ High-performance persistent storage for GitHub Actions.
 [Disks](#what-are-starsling-disks) are persistent filesystems mounted into [Runners](https://starsling.dev/products/runners). They let concurrent jobs reuse build caches, datasets, and artifacts through ordinary directories.
 
 > [!NOTE]
-> Examples target `v0`, starting with `v0.1.0`. Until that release is published, use a commit SHA. The `0.x` series is for early adoption and may include breaking changes. Pin a commit SHA for production workflows ([Releases](#releases)).
+> Examples target the published `v0` release, currently `v0.1.0`. The `0.x` series may include breaking changes. Pin a commit SHA for production workflows ([Releases](#releases)).
 
 ## Quickstart
 
-The example uses the `starsling-ubuntu-26.04` runner label. Replace it with another label from your StarSling Runners configuration if needed. The workflow below publishes the pnpm store from the default branch. Every other job on an enrolled runner mounts it before the steps run and installs against a warm store.
+The example uses the `starsling-ubuntu-26.04` runner label. Replace it with another label from your StarSling Runners configuration if needed. The workflow below publishes the pnpm store from the default branch. Every other authorized job on a StarSling runner mounts it before the steps run and installs against a warm store.
 
 ```yaml
 jobs:
@@ -55,7 +55,7 @@ Each disk has a name, scoped to its repository, and a job can mount several; thi
 ## Prerequisites
 
 1. **StarSling Runners.** Use a runner label from your StarSling Runners configuration. GitHub-hosted runners have no disk to mount; the step skips there ([Limits of this action](#limits-of-this-action)).
-2. **An org enrolled for StarSling Disks.** Enrollment is what makes Disks available on the org's runners. An unenrolled org skips the same way.
+2. **Billing set up for the organization.** Every organization with billing set up can use Disks at the [metered storage rate](https://docs.starsling.dev/pricing#disks).
 
 ## Guides
 

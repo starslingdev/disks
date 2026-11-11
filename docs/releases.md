@@ -21,22 +21,10 @@ all branches and commit SHAs remain directly runnable.
 
 ## Initial 0.1.0 release
 
-The package starts at `0.0.0`, an unpublished baseline. The initial minor changeset proposes
-`0.1.0`. Configure the release App and environments described under [Repository setup](#repository-setup)
-before merging the initial implementation.
-
-1. Merge the implementation into `main`. Validation runs, and the publisher skips `0.0.0`
-   without reading a previous package manifest or creating any tags or releases.
-2. Changesets opens `changeset-release/main` with version `0.1.0`, generated changelog notes,
-   and the bundled action. Review and merge that release PR after its required checks pass.
-3. The publisher validates the merged release commit, publishes the exact `v0.1.0` release,
-   then points `v0` at the same commit. Consumers can use `starslingdev/disks@v0`,
-   `starslingdev/disks@v0.1.0`, or the release commit SHA.
-
-The initial `0.1.0` release follows the normal release PR review path; it does not require the
-special major-release acknowledgement. Later `0.x` releases advance `v0` only after publication.
-The `0.x` series is for early adoption and may include breaking changes; describe migrations
-in the changeset. Promotion to `1.0.0` uses a major changeset and the explicit approval below.
+`v0.1.0` was the first published release, and `v0` points to the latest stable release in that
+major. Consumers can use `starslingdev/disks@v0`, an exact version tag, or a full release commit
+SHA. The `0.x` series may include breaking changes; describe migrations in the changeset.
+Promotion to `1.0.0` uses a major changeset and the explicit approval below.
 
 ## Release sequence
 
