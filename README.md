@@ -36,13 +36,21 @@ The step goes before anything writes the store. When `pnpm install` runs, the mo
 
 ## Performance comparison
 
-| | GitHub `actions/cache` | StarSling Disks |
-|---|---|---|
-| Time to access stored files | Download and extract the cache archive | Mount the published disk |
-| Dependency preparation | Install from the restored store | Install directly from the mounted store |
-| Download speed | Reported by the cache restore action | Not applicable; no archive download |
+StarSling Disks made dependencies ready in **~25s**. GitHub `actions/cache` took **~1m51s**. That is **4.5× faster**.
 
-The [pnpm store benchmark](.github/bench/README.md) compares **Time to Access** and **Dependencies ready** on a frozen Mastra revision. Its summary reports measured durations, cache download speed, and time saved for that run. Dependencies ready includes storage access, pnpm setup, and dependency installation. Results depend on the store, runner hardware, and workload.
+Five warm jobs reused the same 4.50 GiB pnpm store from a frozen Mastra revision. These are the median results:
+
+| Service | Cached folder size | Files ready | Download speed | Dependencies ready |
+|---|---:|---:|---:|---:|
+| GitHub `actions/cache` | 4.50 GiB | ~36s | 177.4 MB/s | ~1m51s |
+| StarSling Disks | 4.50 GiB | ~3s | No download | ~25s |
+| **StarSling speedup** | Same folder | **11.8×** | — | **4.5×** (~1m26s saved) |
+
+`actions/cache` downloaded a 1.41 GiB compressed archive before extraction. Disks mounted the folder without downloading an archive.
+
+**Files ready** measures restore or mount time until one stored byte can be read. **Dependencies ready** adds pnpm setup and an offline install. It excludes checkout, Node setup, queueing, and benchmark bookkeeping.
+
+Results vary by runner hardware and workload. See the [benchmark run](https://github.com/starslingdev/disks/actions/runs/43083684483) and [method](.github/bench/README.md).
 
 StarSling Disks let jobs read and write data directly, eliminating the time spent packing, uploading, downloading, and extracting cache archives.
 
