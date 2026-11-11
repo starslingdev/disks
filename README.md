@@ -36,7 +36,7 @@ The step goes before anything writes the store. When `pnpm install` runs, the mo
 
 ## Performance comparison
 
-StarSling Disks made [Mastra](https://github.com/mastra-ai/mastra)'s dependencies ready in **~25s**—**4.5× faster** than GitHub `actions/cache` at **~1m51s**.
+StarSling Disks made [Mastra](https://github.com/mastra-ai/mastra)'s dependencies ready in **~25s** — **4.5× faster** than GitHub `actions/cache`.
 
 Values are medians from five warm jobs per service on the same frozen Mastra revision.
 
