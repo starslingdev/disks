@@ -36,7 +36,9 @@ The step goes before anything writes the store. When `pnpm install` runs, the mo
 
 ## Performance comparison
 
-StarSling Disks made dependencies ready **4.5× faster** than GitHub `actions/cache` for the popular monorepo [mastra-ai/mastra](https://github.com/mastra-ai/mastra).
+StarSling Disks made [Mastra](https://github.com/mastra-ai/mastra)'s dependencies ready in **~25s**—**4.5× faster** than GitHub `actions/cache` at **~1m51s**.
+
+Values are medians from five warm jobs per service on the same frozen Mastra revision.
 
 | Service | Cached folder size | Files ready | Download speed | Dependencies ready |
 |---|---:|---:|---:|---:|
@@ -44,13 +46,11 @@ StarSling Disks made dependencies ready **4.5× faster** than GitHub `actions/ca
 | StarSling Disks | 4.50 GiB | ~3s | No download | ~25s |
 | **StarSling speedup** | Same folder | **11.8×** | — | **4.5×** (~1m26s saved) |
 
-GitHub `actions/cache` downloaded a 1.41 GiB compressed archive before extraction. StarSling Disks mount the filesystem directly, eliminating the time spent packing, uploading, downloading, and extracting cache archives.
+GitHub `actions/cache` downloaded a 1.41 GiB compressed archive before extraction. StarSling Disks mounted the filesystem directly, avoiding archive packing, upload, download, and extraction.
 
-**Files ready** measures restore or mount time until one stored byte can be read. 
-**Dependencies ready** adds pnpm setup and an offline install. It excludes checkout, Node setup, queueing, and benchmark bookkeeping.
+**Files ready** is the time from starting restore or mount until the first stored byte can be read. **Dependencies ready** adds pnpm setup and an offline install. It excludes checkout, Node setup, queueing, and benchmark bookkeeping.
 
 See the [benchmark run](https://github.com/starslingdev/disks/actions/runs/43083684483) and [method](.github/bench/README.md).
-
 
 ## What are StarSling Disks?
 
