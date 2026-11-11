@@ -6,7 +6,7 @@ on:
         description: StarSling runner label
         type: string
         required: false
-        default: starsling-ubuntu-26.04-4
+        default: starsling-ubuntu-26.04
       mastra-ref:
         description: Mastra branch, tag, or SHA (resolved once)
         type: string
@@ -42,7 +42,7 @@ jobs:
         id: runner
         shell: bash
         env:
-          RUNNER_LABEL: ${{ inputs.starsling-runner || 'starsling-ubuntu-26.04-4' }}
+          RUNNER_LABEL: ${{ inputs.starsling-runner || 'starsling-ubuntu-26.04' }}
         run: |
           if [[ -z "${RUNNER_LABEL//[[:space:]]/}" || "$RUNNER_LABEL" == *$'\n'* || "$RUNNER_LABEL" == *$'\r'* ]]; then
             echo "::error::Set the starsling-runner dispatch input to a registered StarSling runner label (4 CPUs, Ubuntu 26.04)."

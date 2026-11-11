@@ -12,12 +12,12 @@ High-performance persistent storage for GitHub Actions.
 
 ## Quickstart
 
-The example uses the `starsling-ubuntu-26.04-4` runner label. Replace it with another label from your StarSling Runners configuration if needed. The workflow below publishes the pnpm store from the default branch. Every other job on an enrolled runner mounts it before the steps run and installs against a warm store.
+The example uses the `starsling-ubuntu-26.04` runner label. Replace it with another label from your StarSling Runners configuration if needed. The workflow below publishes the pnpm store from the default branch. Every other job on an enrolled runner mounts it before the steps run and installs against a warm store.
 
 ```yaml
 jobs:
   build:
-    runs-on: starsling-ubuntu-26.04-4
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
       id-token: write
