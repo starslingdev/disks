@@ -17421,6 +17421,14 @@ function unavailable(reason, fails, outcome = "skipped") {
 		hit: false
 	};
 }
+/** The most warnings, and the longest line, forwarded from one answer. */
+const MAX_WARNINGS = 10;
+const MAX_WARNING_LENGTH = 1e3;
+/** The answer's warnings: its string lines, bounded. A runner that sends none, or no array, has none. */
+function readWarnings(value) {
+	if (!Array.isArray(value)) return [];
+	return value.filter((line) => typeof line === "string" && line.trim() !== "").slice(0, MAX_WARNINGS).map((line) => line.slice(0, MAX_WARNING_LENGTH));
+}
 /** The runner's one JSON answer line, narrowed by hand: only validated fields are forwarded. */
 function readResult(stdout) {
 	let parsed;
@@ -17430,8 +17438,9 @@ function readResult(stdout) {
 		return;
 	}
 	if (typeof parsed !== "object" || parsed === null) return void 0;
-	const { reason, outcome, publishStatus, path, fails, mounted, hit, generation, access } = parsed;
+	const { reason, outcome, publishStatus, path, fails, mounted, hit, generation, access, warnings } = parsed;
 	if (outcome !== "mounted" && outcome !== "skipped" && outcome !== "failed" || typeof publishStatus !== "string" || typeof fails !== "boolean" || typeof mounted !== "boolean" || typeof hit !== "boolean") return;
+	const lines = readWarnings(warnings);
 	return {
 		outcome,
 		publishStatus,
@@ -17441,7 +17450,8 @@ function readResult(stdout) {
 		...typeof reason === "string" ? { reason } : {},
 		...typeof path === "string" ? { path } : {},
 		...typeof generation === "string" ? { generation } : {},
-		...access === "read-write" || access === "read-only" ? { access } : {}
+		...access === "read-write" || access === "read-only" ? { access } : {},
+		...lines.length > 0 ? { warnings: lines } : {}
 	};
 }
 /** Mint the job's OIDC token for Disks; `undefined` without `id-token: write`. */
@@ -17600,6 +17610,7 @@ async function finish(inputs, strict, result) {
 	if (fails) error(what);
 	else if (result.reason) notice(what);
 	else info(what);
+	for (const line of result.warnings ?? []) warning(oneline(line));
 	try {
 		await render(name, inputs.publish, result);
 	} catch (err) {

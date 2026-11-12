@@ -36,6 +36,7 @@ async function finish(inputs: Inputs, strict: boolean, result: StepResult): Prom
   if (fails) core.error(what)
   else if (result.reason) core.notice(what)
   else core.info(what)
+  for (const line of result.warnings ?? []) core.warning(oneline(line))
   // The summary is presentation, not an output: its failure warns, and never turns a mount into a failure.
   try {
     await render(name, inputs.publish, result)
