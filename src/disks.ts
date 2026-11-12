@@ -28,6 +28,8 @@ export interface StepResult {
   readonly generation?: string
   /** Mounted access, preserved across repeated activations; absent when unmounted. */
   readonly access?: 'read-write' | 'read-only'
+  /** Lines the runner asks to raise as warnings, such as a size cap over the disk's ceiling; the mount stands. */
+  readonly warnings?: readonly string[]
 }
 
 /**
@@ -81,6 +83,19 @@ function unavailable(reason: string, fails: boolean, outcome: 'skipped' | 'faile
   return { reason, outcome, publishStatus: 'unavailable', fails, mounted: false, hit: false }
 }
 
+/** The most warnings, and the longest line, forwarded from one answer. */
+const MAX_WARNINGS = 10
+const MAX_WARNING_LENGTH = 1000
+
+/** The answer's warnings: its string lines, bounded. A runner that sends none, or no array, has none. */
+function readWarnings(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((line): line is string => typeof line === 'string' && line.trim() !== '')
+    .slice(0, MAX_WARNINGS)
+    .map((line) => line.slice(0, MAX_WARNING_LENGTH))
+}
+
 /** The runner's one JSON answer line, narrowed by hand: only validated fields are forwarded. */
 export function readResult(stdout: string): StepResult | undefined {
   let parsed: unknown
@@ -90,7 +105,7 @@ export function readResult(stdout: string): StepResult | undefined {
     return undefined
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined
-  const { reason, outcome, publishStatus, path, fails, mounted, hit, generation, access } = parsed as Record<
+  const { reason, outcome, publishStatus, path, fails, mounted, hit, generation, access, warnings } = parsed as Record<
     string,
     unknown
   >
@@ -103,6 +118,7 @@ export function readResult(stdout: string): StepResult | undefined {
   ) {
     return undefined
   }
+  const lines = readWarnings(warnings)
   return {
     outcome,
     publishStatus,
@@ -113,6 +129,7 @@ export function readResult(stdout: string): StepResult | undefined {
     ...(typeof path === 'string' ? { path } : {}),
     ...(typeof generation === 'string' ? { generation } : {}),
     ...(access === 'read-write' || access === 'read-only' ? { access } : {}),
+    ...(lines.length > 0 ? { warnings: lines } : {}),
   }
 }
 
