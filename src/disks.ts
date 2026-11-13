@@ -12,7 +12,17 @@ const STEP_DEADLINE_MS = 60_000
 const ROOT_GRACE_MS = 5_000
 
 /** The step's inputs, as documented in action.yml. */
-export const INPUTS = ['name', 'path', 'preset', 'size-cap', 'auto-mount', 'access', 'publish', 'on-degraded'] as const
+export const INPUTS = [
+  'name',
+  'path',
+  'preset',
+  'size-cap',
+  'auto-mount',
+  'access',
+  'publish',
+  'on-degraded',
+  'git-mirror',
+] as const
 
 export type Inputs = Partial<Record<(typeof INPUTS)[number], string>>
 
@@ -44,6 +54,7 @@ const INPUT_CHOICES = {
   access: ['read-write', 'read-only'],
   publish: ['never', 'on-change', 'always', 'if-missing'],
   'on-degraded': ['continue', 'fail'],
+  'git-mirror': ['true', 'false'],
 } satisfies Partial<Record<keyof Inputs, readonly string[]>>
 
 /**
@@ -57,6 +68,17 @@ export function validInputs(inputs: Inputs): boolean {
       const value = inputs[key as keyof typeof INPUT_CHOICES]
       return value === undefined || choices.includes(value)
     }) && !(inputs.access === 'read-only' && (inputs.publish ?? 'never') !== 'never')
+  )
+}
+
+/**
+ * Whether the step only sets `git-mirror`: no disk to activate. The runner reads that input from the job's
+ * workflow before any step runs, so the step itself asks nothing and mints no token.
+ */
+export function mirrorOnly(inputs: Inputs): boolean {
+  return (
+    inputs['git-mirror'] !== undefined &&
+    Object.keys(inputs).every((key) => key === 'git-mirror' || key === 'on-degraded')
   )
 }
 

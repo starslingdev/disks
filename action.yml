@@ -31,6 +31,9 @@ inputs:
   on-degraded:
     description: continue (with no disk, or without publication) or fail. A failure (such as invalid-input) fails the step either way.
     required: false
+  git-mirror:
+    description: true lets StarSling keep a one-commit copy of this repository's default branch and seed this job's checkout from it (true or false; off unless true). Read before the job's steps run, so give it as a literal on a step with no if. May be a step's only input.
+    required: false
 outputs:
   name:
     description: The disk's name, the preset name when the step gave none; empty when neither was given.

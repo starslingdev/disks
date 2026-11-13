@@ -17364,7 +17364,8 @@ const INPUTS = [
 	"auto-mount",
 	"access",
 	"publish",
-	"on-degraded"
+	"on-degraded",
+	"git-mirror"
 ];
 /**
 * The `mount` output: `warm` over a published generation, `cold` for an empty mount (a first or
@@ -17383,7 +17384,8 @@ const INPUT_CHOICES = {
 		"always",
 		"if-missing"
 	],
-	"on-degraded": ["continue", "fail"]
+	"on-degraded": ["continue", "fail"],
+	"git-mirror": ["true", "false"]
 };
 /**
 * The documented choices for the inputs this action itself judges (action.yml), and `read-only` only
@@ -17395,6 +17397,13 @@ function validInputs(inputs) {
 		const value = inputs[key];
 		return value === void 0 || choices.includes(value);
 	}) && !(inputs.access === "read-only" && (inputs.publish ?? "never") !== "never");
+}
+/**
+* Whether the step only sets `git-mirror`: no disk to activate. The runner reads that input from the job's
+* workflow before any step runs, so the step itself asks nothing and mints no token.
+*/
+function mirrorOnly(inputs) {
+	return inputs["git-mirror"] !== void 0 && Object.keys(inputs).every((key) => key === "git-mirror" || key === "on-degraded");
 }
 /**
 * The path rule: a leading `~` against the job user's home, a relative path against the workspace,
@@ -17607,9 +17616,29 @@ async function finish(inputs, strict, result) {
 	}
 	if (fails) process.exitCode = 1;
 }
+/** A step with only `git-mirror`: report what the runner reads from the workflow, and activate nothing. */
+function mirrorStep(inputs) {
+	const valid = validInputs(inputs);
+	for (const [output, value] of Object.entries({
+		name: "",
+		path: "",
+		access: "",
+		mount: "none",
+		generation: "",
+		"publish-status": "not-requested"
+	})) setOutput(output, value);
+	setOutput("reason", valid ? "" : "invalid-input");
+	if (!valid) {
+		error("git mirror: invalid-input (git-mirror is true or false)");
+		process.exitCode = 1;
+		return;
+	}
+	info(inputs["git-mirror"] === "true" ? "git mirror: on for this job (StarSling reads it from the workflow before the job starts)" : "git mirror: off for this job");
+}
 /** Complete one activation. Output-write errors propagate to the entrypoint. */
 async function run() {
 	const inputs = readInputs();
+	if (mirrorOnly(inputs)) return mirrorStep(inputs);
 	const strict = inputs["on-degraded"] === "fail";
 	await finish(inputs, strict, await activate(process.env, inputs, strict).catch((err) => {
 		const detail = err instanceof Error ? err.stack ?? err.message : String(err);
