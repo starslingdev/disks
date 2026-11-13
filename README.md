@@ -107,7 +107,9 @@ asks: StarSling stores no copy of your code until a default-branch job with the 
   expression) on a step with no `if:`. Each job that should check out faster needs it.
 - Only a successful default-branch job (push, schedule or manual run) refreshes the copy; other jobs
   only read it. Forks never read or write it.
-- Removing the flag stops both. The last copy stays on the disk until it is deleted.
+- Removing the flag stops both. The last copy stays on the disk until you delete the disk named `git`
+  (`DELETE /api/disks?org=<org>&repository=<owner/name>&name=git` on the StarSling API). Remove the flag
+  from every job first, or the next default-branch job with it makes the copy again.
 
 ## Outputs
 
