@@ -1,6 +1,16 @@
 /** Read action inputs, activate a disk, and write outputs and diagnostics. */
 import * as core from '@actions/core'
-import { activate, defuse, INPUTS, type Inputs, mountState, render, type StepResult } from './disks.js'
+import {
+  activate,
+  defuse,
+  INPUTS,
+  type Inputs,
+  mirrorOnly,
+  mountState,
+  render,
+  type StepResult,
+  validInputs,
+} from './disks.js'
 
 /** Log text on one line, so a disk name or message cannot forge a second log line. */
 const oneline = (value: string): string => value.replace(/[\r\n]+/g, ' ')
@@ -45,9 +55,28 @@ async function finish(inputs: Inputs, strict: boolean, result: StepResult): Prom
   if (fails) process.exitCode = 1
 }
 
+/** A step with only `git-mirror`: report what the runner reads from the workflow, and activate nothing. */
+function mirrorStep(inputs: Inputs): void {
+  const valid = validInputs(inputs)
+  const outputs = { name: '', path: '', access: '', mount: 'none', generation: '', 'publish-status': 'not-requested' }
+  for (const [output, value] of Object.entries(outputs)) core.setOutput(output, value)
+  core.setOutput('reason', valid ? '' : 'invalid-input')
+  if (!valid) {
+    core.error('git mirror: invalid-input (git-mirror is true or false)')
+    process.exitCode = 1
+    return
+  }
+  core.info(
+    inputs['git-mirror'] === 'true'
+      ? 'git mirror: on for this job (StarSling reads it from the workflow before the job starts)'
+      : 'git mirror: off for this job',
+  )
+}
+
 /** Complete one activation. Output-write errors propagate to the entrypoint. */
 export async function run(): Promise<void> {
   const inputs = readInputs()
+  if (mirrorOnly(inputs)) return mirrorStep(inputs)
   const strict = inputs['on-degraded'] === 'fail'
   const result = await activate(process.env, inputs, strict).catch((err: unknown): StepResult => {
     const detail = err instanceof Error ? (err.stack ?? err.message) : String(err)

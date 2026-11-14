@@ -85,8 +85,32 @@ For available presets, their paths, size caps, change tests, and disk limits, se
 | `access` | `read-write`, `read-only` | `read-write` (default) is a private writable view, discarded at job end. `read-only` requires `publish: never`. |
 | `publish` | `never`, `on-change`, `always`, `if-missing` | Publication intent. Defaults to `never`. See [publish modes](docs/lifecycle.md#publish-modes). |
 | `on-degraded` | `continue`, `fail` | What a degradation does (see [Error codes and failures](docs/errors-and-failures.md)). `continue` (default) carries on without the disk, or without its publication; `fail` fails the step. |
+| `git-mirror` | `true`, `false` | Off unless `true`. See [Faster checkout](#faster-checkout-git-mirror). Can be a step's only input. |
 
 `size-cap` and `auto-mount`, like the preset's change test, are the disk's settings: each successful default-branch publication stores its step's, so an omitted one returns to its default.
+
+## Faster checkout (`git-mirror`)
+
+With `git-mirror: true`, StarSling keeps a copy of your repository's latest default-branch commit (the
+files at that commit, no history) on a disk named `git`, and copies it into the job's workspace before a
+plain `actions/checkout` that runs first, so checkout downloads only what changed. It is off unless a job
+asks: StarSling stores no copy of your code until a default-branch job with the flag succeeds.
+
+```yaml
+- uses: actions/checkout@v6
+- uses: starslingdev/disks@v0
+  with:
+    git-mirror: true
+```
+
+- The runner reads the flag from the workflow before any step runs, so give it as a literal (not an
+  expression) on a step with no `if:`. Each job that should check out faster needs it.
+- Only a successful default-branch job (push, schedule or manual run) refreshes the copy; other jobs
+  only read it. Forks never read or write it.
+- Removing the flag stops both. The last copy stays on the disk until you delete the disk named `git`:
+  `sling disks delete git --repo <owner/name>` (or `DELETE /api/disks?org=<org>&repository=<owner/name>&name=git`
+  on the StarSling API). Remove the flag from every job first, or the next default-branch job with it makes
+  the copy again.
 
 ## Outputs
 
