@@ -295,6 +295,29 @@ describe('disks (end-to-end)', () => {
     expect(denied.outputs['publish-status']).toBe('denied')
     expect(denied.summary).toContain('<td>Publish</td><td>publish skipped (not-publisher)</td>')
     expect(denied.log).toContain('disk pnpm-store: publish skipped (not-publisher)')
+    // An answer without `warnings` (every runner before them) raises none.
+    expect(result.log).not.toContain('::warning::')
+    expect(denied.log).not.toContain('::warning::')
+
+    const over =
+      "StarSling Disks: big: size cap 500GB is over this disk's 200GB ceiling; it mounts, but publishing it from the default branch is refused (over-limit); fix: set size-cap to 200GB or less"
+    seam.call = baseCall({
+      stdout: JSON.stringify({
+        outcome: 'mounted',
+        publishStatus: 'not-requested',
+        fails: false,
+        mounted: true,
+        hit: false,
+        access: 'read-write',
+        warnings: [over, 7, 'second\nline'],
+      }),
+    })
+    const warned = await runOnce({ name: 'big', 'size-cap': '500GB' })
+    expect(warned.outputs.mount).toBe('cold')
+    expect(warned.log).toContain(`::warning::${over}`)
+    expect(warned.log).toContain('::warning::second line')
+    expect(warned.log).not.toContain('::warning::7')
+    expect(warned.exitCode).toBeUndefined()
   })
 
   it('reports activation failures and safely logs diagnostics', async () => {
