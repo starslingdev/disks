@@ -97,14 +97,25 @@ plain `actions/checkout` that runs first, so checkout downloads only what change
 asks: StarSling stores no copy of your code until a default-branch job with the flag succeeds.
 
 ```yaml
-- uses: actions/checkout@v6
-- uses: starslingdev/disks@v0
-  with:
-    git-mirror: true
+jobs:
+  test:
+    runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: starslingdev/disks@v0
+        with:
+          git-mirror: true
 ```
 
+- Each job that should check out faster needs both the flag and `id-token: write`, and so does the
+  default-branch job that refreshes the copy. A job without `id-token: write` does not fail: it checks
+  out as before, and its "Set up runner" step logs
+  ``StarSling Disks: available — grant `id-token: write` to mount them``.
 - The runner reads the flag from the workflow before any step runs, so give it as a literal (not an
-  expression) on a step with no `if:`. Each job that should check out faster needs it.
+  expression) on a step with no `if:`.
 - Only a successful default-branch job (push, schedule or manual run) refreshes the copy; other jobs
   only read it. Forks never read or write it.
 - Removing the flag stops both. The last copy stays on the disk until you delete the disk named `git`:
